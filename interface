@@ -1,0 +1,124 @@
+# Import required modules  
+import pexpect
+import difflib
+
+# Define variables 
+ip_address = '192.168.56.101'
+username = 'prne'
+password = 'cisco123!'
+password_enable = 'class123!'
+output_file = 'running_config.txt'
+startup_file = 'start_up_config.txt'
+
+# Create SSH session
+session = pexpect.spawn('ssh ' + username + '@' + ip_address, encoding='utf-8', timeout=20)
+result = session.expect(['Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+# Check for error
+if result != 0:
+    print('--- FAILURE! creating session for: ', ip_address)
+    exit()
+
+# Session expect password
+session.sendline(password)
+result = session.expect(['>', pexpect.TIMEOUT, pexpect.EOF])
+
+# Check for error
+if result != 0:
+    print('--- FAILURE! entering password: ', password)
+    exit()
+
+# Enter enable mode 
+session.sendline('enable')
+result = session.expect(['Password', pexpect.TIMEOUT, pexpect.EOF])
+
+# Check for error 
+if result != 0:
+    print('--- FAILURE! entering enable mode')
+    exit()
+
+# Send enable password
+session.sendline(password_enable)
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Check error 
+if result != 0:
+    print('--- FAILURE! entering enable mode after sending password')
+    exit()
+
+# Send the command to disable terminal length
+session.sendline('terminal length 0')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Configuring the Loopback and GigabitEthernet Interface
+session.sendline('configure terminal')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Configuring Loopback Interface
+session.sendline('interface Loopback0')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+session.sendline('ip address 10.10.10.1 255.255.255.0')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+session.sendline('no shutdown')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Configuring GigabitEthernet Interface
+session.sendline('interface GigabitEthernet1')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+session.sendline('ip address 192.168.56.101 255.255.255.0')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+session.sendline('no shutdown')
+session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Exiting configuration mode
+session.sendline('end')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Saving the configuration
+session.sendline('write memory')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Verifying configuration with 'show running-config'
+session.sendline('show running-config')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+# Saving the running configuration output
+with open(output_file, 'w') as file:
+    file.write(session.before)
+
+# Startup configuration for comparison
+session.sendline('show startup-config')
+result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+with open(startup_file, 'w') as file:
+    file.write(session.before)
+
+# Comparing the running and startup configuration
+with open(output_file, 'r') as running_config_file:
+    running_config_content = running_config_file.read()
+
+with open(startup_file, 'r') as startup_config_file:
+    startup_config_content = startup_config_file.read()
+
+# Displaying the diff
+differ = difflib.Differ()
+diff = list(differ.compare(running_config_content.splitlines(), startup_config_content.splitlines()))
+
+print('\n--- Differences between running and startup configuration')
+for line in diff:
+    print(line)
+
+# Display a success message 
+print('-------------------------------------------------')
+print('')
+print('--- Success! connecting to: ', ip_address)
+print('---               Username: ', username)
+print('---               Password: ', password)
+print('')
+print('--- Running configuration saved for ', output_file)
+print('')
+print('--- Start_up configuration saved for ', startup_file)
+print('-------------------------------------------------')
+
+# Terminate SSH session
+session.close()
